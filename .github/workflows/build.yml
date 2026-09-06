@@ -1,1 +1,54 @@
+name: Build MGE-Profit APK
 
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download project
+        uses: actions/checkout@v4
+
+      - name: Install Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Find ZIP
+        run: |
+          echo "Files in repository:"
+          find . -maxdepth 2 -type f
+          test -f MGE-Profit-Android-v1.zip
+
+      - name: Extract Android project
+        run: |
+          rm -rf android-project
+          mkdir android-project
+          unzip -q MGE-Profit-Android-v1.zip -d android-project
+
+          echo "Extracted project:"
+          find android-project -maxdepth 4 -type f
+
+      - name: Build APK
+        working-directory: android-project
+        run: |
+          gradle :app:assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MGE-Profit-APK
+          path: android-project/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
