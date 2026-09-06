@@ -1,14 +1,12 @@
-name: Build Android APK
+name: Build MGE-Profit APK
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build:
-    name: Build MGE-Profit APK
     runs-on: ubuntu-latest
 
     steps:
@@ -26,62 +24,66 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Check ZIP
+      - name: Find and extract Android project
+        shell: bash
         run: |
-          echo "Repository files:"
-          find . -maxdepth 2 -type f
-          test -f MGE-Profit-Android-v1.zip
+          set -e
 
-      - name: Extract Android project
-        run: |
+          ZIP="MGE-Profit-Android-v2-root.zip"
+
+          if [ ! -f "$ZIP" ]; then
+            echo "ERROR: $ZIP not found"
+            echo "Available ZIP files:"
+            find . -maxdepth 2 -type f -name "*.zip" -print
+            exit 1
+          fi
+
           rm -rf android-project
           mkdir android-project
-          unzip -q MGE-Profit-Android-v1.zip -d android-project
 
-          echo "Project files:"
-          find android-project -maxdepth 4 -type f
+          unzip -q "$ZIP" -d android-project
+
+          echo "Android project extracted:"
+          find android-project -maxdepth 2 -type f | head -50
 
       - name: Fix Java and Kotlin JVM target
+        shell: bash
         run: |
-          cat > android-project/app/build.gradle.kts <<'EOF'
-          plugins {
-              id("com.android.application")
-              id("org.jetbrains.kotlin.android")
-          }
+          set -e
+          cd android-project
 
-          android {
-              namespace = "com.mge.profit"
-              compileSdk = 35
+          python3 - <<'PY'
+          from pathlib import Path
 
-              defaultConfig {
-                  applicationId = "com.mge.profit"
-                  minSdk = 24
-                  targetSdk = 35
-                  versionCode = 1
-                  versionName = "1.0.0"
-              }
+          p = Path("app/build.gradle.kts")
+          text = p.read_text()
 
-              compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
-              }
+          text = text.replace(
+              'sourceCompatibility = JavaVersion.VERSION_1_8',
+              'sourceCompatibility = JavaVersion.VERSION_17'
+          )
 
-              kotlinOptions {
-                  jvmTarget = "17"
-              }
-          }
+          text = text.replace(
+              'targetCompatibility = JavaVersion.VERSION_1_8',
+              'targetCompatibility = JavaVersion.VERSION_17'
+          )
 
-          dependencies {
-              implementation("androidx.core:core-ktx:1.15.0")
-              implementation("androidx.appcompat:appcompat:1.7.0")
-              implementation("com.google.android.material:material:1.12.0")
-              implementation("androidx.activity:activity-ktx:1.10.0")
-          }
-          EOF
+          text = text.replace(
+              'jvmTarget = "1.8"',
+              'jvmTarget = "17"'
+          )
+
+          p.write_text(text)
+          PY
+
+          echo "Final app/build.gradle.kts:"
+          cat app/build.gradle.kts
 
       - name: Build APK
-        working-directory: android-project
+        shell: bash
         run: |
+          set -e
+          cd android-project
           gradle :app:assembleDebug --no-daemon
 
       - name: Upload APK
